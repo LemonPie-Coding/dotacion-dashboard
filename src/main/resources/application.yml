@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: dotacion-dashboard
+
+server:
+  port: 8081   # distinto del proyecto cerrado (8080) para poder correr ambos
+
+talana:
+  # Produccion : https://talana.com/es/api
+  # Sandbox    : https://sandbox.talana.dev/es/api
+  base-url: ${TALANA_BASE_URL:https://talana.com/es/api}
+
+  # NUNCA escribir el token aqui. Se lee de la variable de entorno TALANA_TOKEN.
+  token: ${TALANA_TOKEN:}
+
+  # Pausa entre peticiones (ms). La dotacion normalmente es 1 pagina, pero se
+  # respeta igual por si el universo crece. Talana recomienda <= 20 req/min.
+  delay-entre-peticiones-ms: ${TALANA_DELAY_MS:2000}
+
+  # Tope de paginas, red de seguridad para no quedar en bucle.
+  max-paginas: ${TALANA_MAX_PAGINAS:50}
+
+  # Minutos que se cachea la dotacion en memoria antes de volver a consultar.
+  # El boton "Recargar datos" del dashboard siempre fuerza una consulta nueva.
+  cache-minutos: ${DOTACION_CACHE_MINUTOS:10}
+
+logging:
+  level:
+    cl.grupopro.dotacion: INFO
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %msg%n"

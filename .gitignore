@@ -1,0 +1,33 @@
+# ===== Build =====
+target/
+*.class
+
+# ===== IDE =====
+# IMPORTANTE: .vscode puede contener launch.json con el TOKEN. NO versionar.
+.idea/
+*.iml
+.vscode/
+
+# ===== Secretos / configuracion local =====
+# El token se lee de la variable de entorno TALANA_TOKEN. Nunca versionarlo.
+*.env
+.env
+application-local.yml
+application-secret.yml
+
+# ===== Datos sensibles (RUT, nombres, contratos reales) =====
+# Salidas de los scripts de diagnostico y cualquier volcado de datos.
+*.json
+!package.json
+c1.json
+muestra-contrato.json
+contrato-problema.json
+datos/
+
+# ===== Scripts de diagnostico temporales =====
+probar-campos.ps1
+probar-vigencia.ps1
+diag2.ps1
+
+# ===== Varios =====
+*.log
