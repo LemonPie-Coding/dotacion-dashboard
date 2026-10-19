@@ -63,6 +63,19 @@ public class DotacionController {
         return dotacion.diagnostico();
     }
 
+    /** Estado del modo actual (normal/edicion). */
+    @GetMapping(value = "/api/modo", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> modo() {
+        return Map.of("edicion", dotacion.isModoEdicion());
+    }
+
+    /** Cambia el modo. ?edicion=true => modo edicion (siempre fresco). */
+    @org.springframework.web.bind.annotation.PostMapping(value = "/api/modo", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> setModo(@RequestParam boolean edicion) {
+        dotacion.setModoEdicion(edicion);
+        return Map.of("edicion", dotacion.isModoEdicion());
+    }
+
     /** Compara la dotacion entre dos fechas. fechaA/fechaB en YYYY-MM-DD o YYYYMMDD. */
     @GetMapping(value = "/api/comparar", produces = MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8")
     public ComparacionService.Comparacion comparar(@RequestParam String fechaA,

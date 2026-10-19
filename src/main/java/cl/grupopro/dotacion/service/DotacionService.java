@@ -3,6 +3,7 @@ package cl.grupopro.dotacion.service;
 import cl.grupopro.dotacion.config.TalanaProperties;
 import cl.grupopro.dotacion.dto.ContratoDotacionDto;
 import cl.grupopro.dotacion.dto.PagedResponse;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -47,6 +48,12 @@ public class DotacionService {
     private volatile Instant cacheEn;
     private long ultimaPeticionMs = 0;
 
+    // Modo de operacion: NORMAL usa cache de disco para meses cerrados;
+    // EDICION ignora el cache al leer pero lo actualiza con el valor fresco.
+    private volatile boolean modoEdicion = false;
+
+    private final java.io.File dirCache;
+
     public DotacionService(TalanaProperties props, ObjectMapper mapper) {
         this.props = props;
         this.mapper = mapper;
@@ -54,22 +61,55 @@ public class DotacionService {
                 .connectTimeout(Duration.ofSeconds(30))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
+        // carpeta de cache en disco (datos/dotacion-cache/)
+        this.dirCache = new java.io.File("datos/dotacion-cache");
+        if (!dirCache.exists() && !dirCache.mkdirs()) {
+            log.warn("No se pudo crear la carpeta de cache {}", dirCache.getAbsolutePath());
+        }
+    }
+
+    public boolean isModoEdicion() { return modoEdicion; }
+    public void setModoEdicion(boolean v) {
+        this.modoEdicion = v;
+        log.info("Modo cambiado a {}", v ? "EDICION (siempre fresco)" : "NORMAL (cache de disco)");
     }
 
     /**
-     * @param fecha  fecha de corte; null => hoy (solo-activos=true).
-     * @param forzar ignora el cache y consulta Talana de nuevo.
+     * Dotacion a una fecha, con cache persistente por mes.
+     *
+     * - Un mes YA CERRADO (su mes terminó) es historico: se guarda en disco la
+     *   primera vez y de ahi en adelante se lee del disco (instantaneo), salvo en
+     *   modo edicion. El mes EN CURSO siempre se consulta fresco.
+     * - Modo EDICION: ignora el cache de disco al leer, pero guarda el resultado
+     *   fresco (util si se corrigio un mes pasado en Talana).
+     *
+     * @param fecha  fecha de corte; null => hoy.
+     * @param forzar fuerza consulta a Talana (boton "Recargar datos").
      */
     public synchronized Dotacion calcular(LocalDate fecha, boolean forzar) {
-        String clave = (fecha == null) ? "hoy" : fecha.toString();
-        boolean frescoEnCache = cache != null
-                && clave.equals(cacheClave)
-                && cacheEn != null
-                && Duration.between(cacheEn, Instant.now()).toMinutes() < props.getCacheMinutos();
-        if (!forzar && frescoEnCache) {
-            return cache;
+        LocalDate corte = (fecha == null) ? LocalDate.now() : fecha;
+        boolean mesCerrado = esMesCerrado(corte);
+
+        // En modo normal y mes cerrado, intenta leer del disco (a menos que se fuerce).
+        if (!forzar && !modoEdicion && mesCerrado) {
+            Dotacion enDisco = leerDeDisco(corte);
+            if (enDisco != null) {
+                log.info("Dotacion {} servida desde cache de disco", corte);
+                return enDisco;
+            }
         }
 
+        Dotacion d = calcularDesdeApi(fecha);
+
+        // Guarda en disco los meses cerrados (en normal la primera vez; en edicion
+        // siempre, para actualizar correcciones de meses pasados).
+        if (mesCerrado) guardarEnDisco(corte, d);
+        return d;
+    }
+
+    /** Cálculo real contra la API de Talana (sin tocar el cache de disco). */
+    private Dotacion calcularDesdeApi(LocalDate fecha) {
+        String clave = (fecha == null) ? "hoy" : fecha.toString();
         long t0 = System.currentTimeMillis();
         LocalDate corte = (fecha == null) ? LocalDate.now() : fecha;
         List<ContratoDotacionDto> brutos = traerActivos(fecha);
@@ -142,9 +182,41 @@ public class DotacionService {
         log.info("Dotacion {}: {} personas ({} contratos leidos, {} descartados por vigencia) en {}s. M={} F={} ext={}",
                 clave, d.total, d.contratosLeidos, d.contratosDescartados, d.segundos,
                 d.masculino, d.femenino, d.extranjeros);
-
-        cache = d; cacheClave = clave; cacheEn = Instant.now();
         return d;
+    }
+
+    // ==================================================================
+    //  Cache persistente en disco por fecha de corte
+    // ==================================================================
+
+    /** Un mes esta "cerrado" si ya termino (el corte no cae en el mes en curso). */
+    private boolean esMesCerrado(LocalDate corte) {
+        LocalDate hoy = LocalDate.now();
+        return corte.getYear() < hoy.getYear()
+                || (corte.getYear() == hoy.getYear() && corte.getMonthValue() < hoy.getMonthValue());
+    }
+
+    private java.io.File archivoDe(LocalDate corte) {
+        return new java.io.File(dirCache, corte.toString() + ".json");
+    }
+
+    private Dotacion leerDeDisco(LocalDate corte) {
+        java.io.File f = archivoDe(corte);
+        if (!f.exists()) return null;
+        try {
+            return mapper.readValue(f, Dotacion.class);
+        } catch (Exception e) {
+            log.warn("No se pudo leer cache {}: {}", f.getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    private void guardarEnDisco(LocalDate corte, Dotacion d) {
+        try {
+            mapper.writeValue(archivoDe(corte), d);
+        } catch (Exception e) {
+            log.warn("No se pudo guardar cache {}: {}", corte, e.getMessage());
+        }
     }
 
     // ==================================================================
@@ -324,6 +396,7 @@ public class DotacionService {
     //  Modelo de salida (se serializa a JSON para el dashboard)
     // ==================================================================
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Dotacion {
         public String fecha;
         public String generadoEn;

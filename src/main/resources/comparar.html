@@ -68,6 +68,22 @@
   @keyframes girar{to{transform:rotate(360deg)}}
   .error{background:#fdecee;border:1px solid #f5c2c7;color:#842029;padding:14px 18px;border-radius:12px;margin:10px 0}
   .hint{font-size:12px;color:var(--gris);margin:-6px 0 14px}
+  .cab-anual{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:6px}
+  .progreso{display:flex;align-items:center;gap:12px;margin:0 0 14px}
+  .barra-prog{flex:1;height:8px;background:var(--linea);border-radius:999px;overflow:hidden}
+  .barra-prog .relleno{height:100%;width:0;background:var(--rojo);transition:width .2s}
+  .progreso span{font-size:12px;color:var(--gris);white-space:nowrap}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  /* interruptor de modo en el header */
+  .modo{display:flex;align-items:center;gap:8px}
+  .modo .etq{font-size:12px;font-weight:600;color:#fff;opacity:.9;white-space:nowrap}
+  .modo-sw{position:relative;width:52px;height:26px;border-radius:999px;background:rgba(255,255,255,.3);border:none;cursor:pointer;transition:background .2s;flex:none}
+  .modo-sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
+  .modo-sw.on{background:#e08a1e}
+  .modo-sw.on::after{transform:translateX(26px)}
+  .modo .estado-modo{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .modo .estado-modo.normal{background:rgba(255,255,255,.2);color:#fff}
+  .modo .estado-modo.edicion{background:#e08a1e;color:#fff}
   footer{text-align:center;color:var(--gris);font-size:12px;padding:20px}
 </style>
 </head>
@@ -77,6 +93,11 @@
   <div class="h-txt">
     <h1>Comparar dotación entre dos fechas</h1>
     <div class="sub">Grupo Pro · diferencias por centro, razón social y cargo</div>
+  </div>
+  <div class="modo" title="Modo normal: usa caché de meses cerrados (rápido). Modo edición: siempre consulta fresco a Talana.">
+    <span class="estado-modo normal" id="estadoModo">NORMAL</span>
+    <button class="modo-sw" id="modoSw" aria-label="Cambiar modo"></button>
+    <span class="etq">Edición</span>
   </div>
   <nav class="tabs">
     <a href="/">Dotación</a>
@@ -115,6 +136,30 @@
 <main>
   <div id="aviso"></div>
   <div class="kpis" id="kpis"></div>
+
+  <!-- Evolución anual: una línea por año, eje X = meses -->
+  <div class="panel" id="panelAnual">
+    <div class="cab-anual">
+      <h3 style="margin:0;flex:1">Evolución de dotación por año</h3>
+      <div class="campo"><label for="anioDesde">Año desde</label>
+        <select id="anioDesde"></select></div>
+      <div class="campo"><label for="anioHasta">Año hasta</label>
+        <select id="anioHasta"></select></div>
+      <div class="campo"><label for="metrica">Métrica</label>
+        <select id="metrica">
+          <option value="total">Dotación total</option>
+          <option value="sexo">Por sexo (M / F)</option>
+          <option value="nac">Por nacionalidad (CL / Ext)</option>
+        </select></div>
+      <button class="btn" id="btnAnual">Generar</button>
+    </div>
+    <p class="hint">Cada punto es la dotación activa al <b>último día del mes</b>. Máximo 4 años por comparación; cada mes es una consulta a Talana (~12 s).</p>
+    <div class="progreso" id="progAnual" hidden>
+      <div class="barra-prog"><div class="relleno" id="progAnualRell"></div></div>
+      <span id="progAnualTxt"></span>
+    </div>
+    <div class="wrap" style="height:380px"><canvas id="chAnual"></canvas></div>
+  </div>
 
   <div class="panel"><h3>Por razón social</h3><div class="hint" id="hintRazon"></div><div class="wrap"><canvas id="chRazon"></canvas></div></div>
   <div class="panel"><h3>Por centro de costo <span id="topCentro" style="font-weight:400;color:var(--gris);text-transform:none;font-size:12px"></span></h3><div class="wrap"><canvas id="chCentro"></canvas></div></div>
@@ -247,7 +292,126 @@ function dibujar(id, grupos, seg){
   });
 }
 
+// ====================================================================
+//  EVOLUCIÓN ANUAL: una línea por año, eje X = meses
+// ====================================================================
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const PALETA_ANIOS = ['#BE1622','#2f6fb0','#e08a1e','#2e8b57','#7a5cc0','#4aa8a0'];
+let anualEnCurso = false;
+
+function ultimoDiaMes(anio, mes1a12){
+  const d = new Date(anio, mes1a12, 0);
+  return anio+'-'+String(mes1a12).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+async function generarAnual(){
+  if(anualEnCurso) return;
+  const aDesde = +$('#anioDesde').value, aHasta = +$('#anioHasta').value;
+  const metrica = $('#metrica').value;
+  if(aDesde > aHasta){ alert('El año desde no puede ser mayor que el año hasta.'); return; }
+  if(aHasta - aDesde > 3){ alert('Máximo 4 años por comparación.'); return; }
+
+  const anios = [];
+  for(let a=aDesde; a<=aHasta; a++) anios.push(a);
+
+  // no tiene sentido pedir meses futuros del año en curso
+  const hoy = new Date();
+  const esFuturo = (anio,mes)=> anio>hoy.getFullYear() || (anio===hoy.getFullYear() && mes>(hoy.getMonth()+1));
+
+  anualEnCurso = true;
+  $('#btnAnual').disabled = true;
+  const prog = $('#progAnual'); prog.hidden = false;
+  const rell = $('#progAnualRell'), txt = $('#progAnualTxt');
+
+  // datos[anio][mes0..11] = objeto dotacion (o null si futuro)
+  const datos = {};
+  const tareas = [];
+  for(const a of anios){ datos[a] = new Array(12).fill(null);
+    for(let m=1;m<=12;m++){ if(!esFuturo(a,m)) tareas.push({a,m}); }
+  }
+
+  try{
+    for(let i=0;i<tareas.length;i++){
+      const {a,m} = tareas[i];
+      const fecha = ultimoDiaMes(a,m);
+      txt.textContent = 'Consultando '+fecha+'  ('+(i+1)+' de '+tareas.length+')';
+      rell.style.width = Math.round(i/tareas.length*100)+'%';
+      const r = await fetch('/api/dotacion?fecha='+fecha);
+      const j = await r.json();
+      if(!r.ok || j.error){ throw new Error('Mes '+fecha+': '+(j.mensaje||j.causa||('HTTP '+r.status))); }
+      datos[a][m-1] = j;
+    }
+    rell.style.width='100%'; txt.textContent='Listo: '+tareas.length+' meses.';
+    dibujarAnual(anios, datos, metrica);
+  }catch(e){
+    txt.textContent='Error: '+e.message;
+    alert('No se pudo generar la evolución anual.\n'+e.message);
+  }finally{
+    anualEnCurso = false;
+    $('#btnAnual').disabled = false;
+    setTimeout(()=>{ prog.hidden=true; rell.style.width='0'; }, 2500);
+  }
+}
+
+// extrae el valor de una dotación según métrica y sub-serie
+function valorMetrica(dot, metrica, sub){
+  if(!dot) return null;
+  if(metrica==='total') return dot.total;
+  if(metrica==='sexo')  return sub==='M' ? dot.masculino : dot.femenino;
+  if(metrica==='nac')   return sub==='CL' ? dot.chilenos : dot.extranjeros;
+  return dot.total;
+}
+
+function dibujarAnual(anios, datos, metrica){
+  destruir('chAnual');
+
+  // sub-series según métrica
+  let subs = [{key:null, nombre:''}];
+  if(metrica==='sexo') subs = [{key:'M',nombre:'M'},{key:'F',nombre:'F'}];
+  if(metrica==='nac')  subs = [{key:'CL',nombre:'Chile'},{key:'EXT',nombre:'Ext'}];
+
+  const datasets = [];
+  anios.forEach((a,idx)=>{
+    const color = PALETA_ANIOS[idx % PALETA_ANIOS.length];
+    subs.forEach((s,si)=>{
+      const data = datos[a].map(dot => valorMetrica(dot, metrica, s.key));
+      const nombre = metrica==='total' ? String(a) : (a+' · '+s.nombre);
+      datasets.push({
+        label: nombre,
+        data,
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2.5,
+        borderDash: si===1 ? [6,4] : [],   // 2ª sub-serie punteada, mismo color de año
+        tension: 0.35,
+        spanGaps: true,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      });
+    });
+  });
+
+  charts['chAnual'] = new Chart(document.getElementById('chAnual'),{
+    type:'line',
+    data:{ labels: MESES, datasets },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      animation:{duration:700, easing:'easeOutQuart'},
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:12},boxWidth:16,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=> ' '+c.dataset.label+': '+(c.parsed.y==null?'s/d':fmt(c.parsed.y))+' personas'}}
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:12}}},
+        y:{beginAtZero:false,ticks:{precision:0,font:{size:11}},grid:{color:'#f0f0f2'}}
+      }
+    }
+  });
+}
+
 // eventos
+$('#btnAnual').addEventListener('click',generarAnual);
 $('#comparar').addEventListener('click',comparar);
 $('#seg').addEventListener('change',render);
 document.querySelectorAll('#switch button').forEach(b=>b.addEventListener('click',()=>{
@@ -264,6 +428,38 @@ const hoy=new Date(); const mesAtras=new Date(hoy); mesAtras.setMonth(hoy.getMon
 $('#fB').value=hoy.toISOString().slice(0,10);
 $('#fA').value=mesAtras.toISOString().slice(0,10);
 $('#footer').textContent='Grupo Pro · Comparación de Dotación · '+hoy.getFullYear();
+
+// selectores de año: desde 2023 hasta el año actual
+(function(){
+  const anioActual = hoy.getFullYear();
+  const desde = 2023;
+  const optsD = $('#anioDesde'), optsH = $('#anioHasta');
+  for(let a=desde; a<=anioActual; a++){
+    optsD.insertAdjacentHTML('beforeend','<option value="'+a+'">'+a+'</option>');
+    optsH.insertAdjacentHTML('beforeend','<option value="'+a+'">'+a+'</option>');
+  }
+  // por defecto: los 2 años más recientes (año anterior y actual)
+  optsD.value = Math.max(desde, anioActual-1);
+  optsH.value = anioActual;
+})();
+
+// interruptor de modo (normal / edición)
+function pintarModo(edicion){
+  const sw=$('#modoSw'), est=$('#estadoModo');
+  sw.classList.toggle('on', edicion);
+  est.textContent = edicion ? 'EDICIÓN' : 'NORMAL';
+  est.className = 'estado-modo ' + (edicion?'edicion':'normal');
+}
+async function cargarModo(){
+  try{ const r=await fetch('/api/modo'); const j=await r.json(); pintarModo(!!j.edicion); }catch(e){}
+}
+$('#modoSw').addEventListener('click', async ()=>{
+  const nuevo = !$('#modoSw').classList.contains('on');
+  pintarModo(nuevo);
+  try{ const r=await fetch('/api/modo?edicion='+nuevo,{method:'POST'}); const j=await r.json(); pintarModo(!!j.edicion); }
+  catch(e){ cargarModo(); }
+});
+cargarModo();
 </script>
 </body>
 </html>

@@ -70,6 +70,28 @@
   .detalle .cab{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--linea);flex-wrap:wrap}
   .detalle .cab h3{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.4px;flex:1}
   .detalle .conteo{font-size:12px;color:var(--gris)}
+
+  /* carrusel: razon social <-> detalle */
+  .carrusel{background:var(--panel);border-radius:var(--radio);box-shadow:var(--sombra);border:1px solid var(--linea);overflow:hidden}
+  .carr-cab{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--linea);flex-wrap:wrap}
+  .carr-tabs{display:inline-flex;border:1px solid var(--linea);border-radius:10px;overflow:hidden;background:#fff}
+  .carr-tab{border:none;background:#fff;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer;color:var(--gris);transition:background .15s,color .15s}
+  .carr-tab:hover{background:#faf2f3}
+  .carr-tab.activo{background:var(--rojo);color:#fff}
+  .carr-cab .conteo{margin-left:4px}
+  .carr-nav{margin-left:auto;display:flex;gap:6px}
+  .carr-flecha{width:36px;height:36px;border:1px solid var(--linea);background:#fff;border-radius:9px;cursor:pointer;font-size:15px;color:var(--rojo);transition:background .15s,opacity .15s}
+  .carr-flecha:hover:not(:disabled){background:#fdeef0}
+  .carr-flecha:disabled{opacity:.35;cursor:not-allowed;color:var(--gris)}
+  .carr-viewport{overflow:hidden}
+  .carr-track{display:flex;width:200%;transition:transform .55s cubic-bezier(.22,.61,.36,1);will-change:transform}
+  .carr-slide{width:50%;flex:none;padding:18px;transition:opacity .4s ease}
+  .carr-tab{transition:background .25s ease,color .25s ease}
+  .carr-flecha{transition:background .2s ease,opacity .25s ease,transform .15s ease}
+  .carr-flecha:active:not(:disabled){transform:scale(.92)}
+  .carr-slide .detalle{box-shadow:none;border:none;border-radius:0}
+  .carr-slide .filtros{border-radius:10px;border:1px solid var(--linea);margin-bottom:12px}
+
   .hint-rango{margin:0 18px 14px;font-size:12px;color:var(--gris)}
   .progreso{display:flex;align-items:center;gap:12px;margin:0 18px 16px}
   .barra-prog{flex:1;height:8px;background:var(--linea);border-radius:999px;overflow:hidden}
@@ -112,6 +134,18 @@
   .spinner{display:inline-block;width:18px;height:18px;border:3px solid var(--linea);border-top-color:var(--rojo);border-radius:50%;animation:girar .8s linear infinite;vertical-align:-3px;margin-right:8px}
   @keyframes girar{to{transform:rotate(360deg)}}
   .error{background:#fdecee;border:1px solid #f5c2c7;color:#842029;padding:14px 18px;border-radius:12px;margin:10px 0}
+
+  /* interruptor de modo en el header */
+  .modo{display:flex;align-items:center;gap:8px}
+  .modo .etq{font-size:12px;font-weight:600;color:#fff;opacity:.9;white-space:nowrap}
+  .modo-sw{position:relative;width:52px;height:26px;border-radius:999px;background:rgba(255,255,255,.3);border:none;cursor:pointer;transition:background .2s;flex:none}
+  .modo-sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s}
+  .modo-sw.on{background:#e08a1e}
+  .modo-sw.on::after{transform:translateX(26px)}
+  .modo .estado-modo{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .modo .estado-modo.normal{background:rgba(255,255,255,.2);color:#fff}
+  .modo .estado-modo.edicion{background:#e08a1e;color:#fff}
+
   footer{text-align:center;color:var(--gris);font-size:12px;padding:20px}
 </style>
 </head>
@@ -121,6 +155,11 @@
   <div class="h-txt">
     <h1>Dotación Activa</h1>
     <div class="sub">Grupo Pro · datos en vivo desde Talana</div>
+  </div>
+  <div class="modo" title="Modo normal: usa caché de meses cerrados (rápido). Modo edición: siempre consulta fresco a Talana.">
+    <span class="estado-modo normal" id="estadoModo">NORMAL</span>
+    <button class="modo-sw" id="modoSw" aria-label="Cambiar modo"></button>
+    <span class="etq">Edición</span>
   </div>
   <nav class="tabs">
     <a href="/" class="activo">Dotación</a>
@@ -162,22 +201,11 @@
   <div class="grid">
     <div class="panel"><div class="cab"><h3>Por sexo</h3></div><div class="wrap"><canvas id="chSexo"></canvas></div></div>
     <div class="panel"><div class="cab"><h3>Por nacionalidad</h3></div><div class="wrap"><canvas id="chNac"></canvas></div></div>
-
-    <div class="panel full alto">
-      <div class="cab">
-        <h3>Por razón social</h3>
-        <button class="btn excel" id="expRazon" title="Exportar resumen por razón social y centro de costo">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm0 2 4 4h-4V4zM8.3 12h1.6l1.1 2 1.1-2h1.6l-1.9 3 1.9 3h-1.6l-1.1-2-1.1 2H8.3l1.9-3-1.9-3z"/></svg>
-          Exportar CSV
-        </button>
-      </div>
-      <div class="wrap"><canvas id="chRazon"></canvas></div>
-    </div>
-
     <div class="panel full"><div class="cab"><h3>Top 15 centros de costo</h3></div><div class="wrap"><canvas id="chCentro"></canvas></div></div>
     <div class="panel full"><div class="cab"><h3>Top 15 cargos</h3></div><div class="wrap"><canvas id="chCargo"></canvas></div></div>
   </div>
 
+  <!-- Exportar por rango de meses (arriba del carrusel) -->
   <div class="panel full" style="margin-bottom:20px">
     <div class="cab" style="flex-wrap:wrap">
       <h3 style="flex:none">Exportar por rango de meses</h3>
@@ -199,33 +227,57 @@
     </div>
   </div>
 
-  <div class="detalle">
-    <div class="cab">
-      <h3>Detalle de dotación</h3>
+  <!-- Carrusel: Por razón social  <->  Detalle de dotación -->
+  <div class="carrusel">
+    <div class="carr-cab">
+      <div class="carr-tabs">
+        <button class="carr-tab activo" data-slide="0">Por razón social</button>
+        <button class="carr-tab" data-slide="1">Detalle de dotación</button>
+      </div>
       <span class="conteo" id="conteo"></span>
-      <button class="btn sec" id="limpiarDet">Limpiar</button>
-      <button class="btn excel" id="expDetalle" title="Exportar todo el detalle filtrado">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm0 2 4 4h-4V4zM8.3 12h1.6l1.1 2 1.1-2h1.6l-1.9 3 1.9 3h-1.6l-1.1-2-1.1 2H8.3l1.9-3-1.9-3z"/></svg>
-        Exportar Excel
-      </button>
+      <button class="btn sec" id="limpiarDet">Limpiar filtros</button>
+      <div class="carr-nav">
+        <button class="carr-flecha" id="carrPrev" title="Anterior" disabled>&#10094;</button>
+        <button class="carr-flecha" id="carrNext" title="Siguiente">&#10095;</button>
+      </div>
     </div>
-    <div class="filtros" id="filtros"><!-- combos mixtos generados por JS --></div>
-    <div class="tabla-wrap">
-      <table id="tabla">
-        <thead><tr>
-          <th data-k="rut">RUT</th>
-          <th data-k="nombre">Nombre</th>
-          <th data-k="razonSocial">Razón social</th>
-          <th data-k="centroCosto">Centro de costo</th>
-          <th data-k="cargo">Cargo</th>
-          <th data-k="codigo">Cód. contrato</th>
-          <th data-k="desde">Fecha ingreso</th>
-          <th data-k="hasta">Fecha término</th>
-          <th data-k="sexo">Sexo</th>
-          <th data-k="nacionalidad">Nacion.</th>
-        </tr></thead>
-        <tbody id="tbody"></tbody>
-      </table>
+
+    <div class="carr-viewport">
+      <div class="carr-track" id="carrTrack">
+
+        <!-- Slide 0: gráfico por razón social -->
+        <section class="carr-slide">
+          <div class="panel" style="margin:0">
+            <div class="cab"><h3>Dotación por razón social</h3></div>
+            <div class="wrap" style="height:440px"><canvas id="chRazon"></canvas></div>
+          </div>
+        </section>
+
+        <!-- Slide 1: detalle con filtros -->
+        <section class="carr-slide">
+          <div class="detalle" style="margin:0">
+            <div class="filtros" id="filtros"><!-- combos mixtos generados por JS --></div>
+            <div class="tabla-wrap">
+              <table id="tabla">
+                <thead><tr>
+                  <th data-k="rut">RUT</th>
+                  <th data-k="nombre">Nombre</th>
+                  <th data-k="razonSocial">Razón social</th>
+                  <th data-k="centroCosto">Centro de costo</th>
+                  <th data-k="cargo">Cargo</th>
+                  <th data-k="codigo">Cód. contrato</th>
+                  <th data-k="desde">Fecha ingreso</th>
+                  <th data-k="hasta">Fecha término</th>
+                  <th data-k="sexo">Sexo</th>
+                  <th data-k="nacionalidad">Nacion.</th>
+                </tr></thead>
+                <tbody id="tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
     </div>
   </div>
 </main>
@@ -696,10 +748,34 @@ $('#limpiarDet').addEventListener('click',()=>{
 });
 $('#recargar').addEventListener('click',()=>cargar($('#fecha').value, true));
 $('#fecha').addEventListener('change',()=>cargar($('#fecha').value));
-$('#expRazon').addEventListener('click',exportResumen);
-$('#expDetalle').addEventListener('click',exportDetalle);
 $('#expRangoResumen').addEventListener('click',exportRangoResumen);
 $('#expRangoDetalle').addEventListener('click',exportRangoDetalle);
+
+// ---- carrusel (Por razón social <-> Detalle) ----
+let slideActual = 0;
+function irSlide(n){
+  slideActual = Math.max(0, Math.min(1, n));
+  $('#carrTrack').style.transform = 'translateX(-'+(slideActual*50)+'%)';
+  document.querySelectorAll('.carr-tab').forEach((t,i)=>t.classList.toggle('activo', i===slideActual));
+  $('#carrPrev').disabled = slideActual===0;
+  $('#carrNext').disabled = slideActual===1;
+  // cuando se muestra el gráfico, Chart.js necesita re-medir el canvas (estaba oculto)
+  if(slideActual===0 && charts['chRazon']) charts['chRazon'].resize();
+}
+document.querySelectorAll('.carr-tab').forEach(t=>t.addEventListener('click',()=>irSlide(+t.dataset.slide)));
+$('#carrPrev').addEventListener('click',()=>irSlide(slideActual-1));
+$('#carrNext').addEventListener('click',()=>irSlide(slideActual+1));
+// arrastre horizontal / swipe
+(function(){
+  const vp = document.querySelector('.carr-viewport');
+  let x0=null;
+  vp.addEventListener('pointerdown',e=>{ x0=e.clientX; });
+  vp.addEventListener('pointerup',e=>{
+    if(x0===null) return;
+    const dx=e.clientX-x0; x0=null;
+    if(Math.abs(dx)>60){ irSlide(slideActual + (dx<0?1:-1)); }
+  });
+})();
 document.querySelectorAll('#tabla th').forEach(th=>th.addEventListener('click',()=>{
   const k=th.dataset.k; orden.dir = (orden.k===k)? -orden.dir : 1; orden.k=k;
   renderTabla(filtradas());
@@ -710,6 +786,28 @@ if(LOGO_B64 && LOGO_B64!=="/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDAwMEBAQFB
 $('#fecha').value = new Date().toISOString().slice(0,10);
 $('#footer').textContent='Grupo Pro · Dashboard de Dotación · '+new Date().getFullYear();
 CAMPOS.forEach(c=>sel[c.k]='');
+
+// ---- interruptor de modo (normal / edición) ----
+function pintarModo(edicion){
+  const sw=$('#modoSw'), est=$('#estadoModo');
+  sw.classList.toggle('on', edicion);
+  est.textContent = edicion ? 'EDICIÓN' : 'NORMAL';
+  est.className = 'estado-modo ' + (edicion?'edicion':'normal');
+}
+async function cargarModo(){
+  try{ const r=await fetch('/api/modo'); const j=await r.json(); pintarModo(!!j.edicion); }catch(e){}
+}
+$('#modoSw').addEventListener('click', async ()=>{
+  const nuevo = !$('#modoSw').classList.contains('on');
+  pintarModo(nuevo); // feedback inmediato
+  try{
+    const r=await fetch('/api/modo?edicion='+nuevo, {method:'POST'});
+    const j=await r.json(); pintarModo(!!j.edicion);
+    // al cambiar de modo, recargar la vista actual con datos acordes
+    cargar($('#fecha').value, true);
+  }catch(e){ cargarModo(); }
+});
+cargarModo();
 // rango por defecto: ultimos 6 meses hasta el mes actual
 (function(){
   const hoy=new Date();
